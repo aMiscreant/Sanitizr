@@ -1,0 +1,12 @@
+<resources>
+    <color name="colorPrimary">#FF5722</color> <!-- Orange -->
+    <color name="colorPrimaryVariant">#E64A19</color> <!-- Darker Orange -->
+    <color name="colorOnPrimary">#FFFFFF</color> <!-- White text on orange -->
+
+    <color name="colorBackground">#121212</color> <!-- Dark background -->
+    <color name="colorSurface">#1E1E1E</color> <!-- Cards, panels -->
+    <color name="colorOnSurface">#FFFFFF</color> <!-- Text on dark surfaces -->
+    <color name="colorAccent">#FF5722</color> <!-- Teal accent 1DE9B6 Old -->
+    <color name="ic_launcher_background">#FF6F00</color> <!-- accent -->
+</resources>
+
