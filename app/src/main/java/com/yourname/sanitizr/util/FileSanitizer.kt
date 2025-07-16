@@ -102,23 +102,63 @@ object FileSanitizer {
         return supportedFileTypes.entries.find { ext in it.value }?.key
     }
 
+    private fun fullyStripImageMetadata(file: File): Boolean {
+        return try {
+            val bitmap = BitmapFactory.decodeFile(file.absolutePath)
+            val format = when (file.extension.lowercase()) {
+                "png" -> Bitmap.CompressFormat.PNG
+                else -> Bitmap.CompressFormat.JPEG
+            }
+
+            val tempFile = File(file.parent, "sanitized_${file.name}")
+            FileOutputStream(tempFile).use { out ->
+                bitmap.compress(format, 100, out)
+            }
+
+            if (file.delete()) {
+                tempFile.renameTo(file)
+            } else {
+                tempFile.delete()
+                return false
+            }
+            true
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
+    }
+
     private fun sanitizeImage(file: File): Boolean {
         return try {
+            // --- STEP 1 ---
+            // Attempt to scrub metadata directly
             val exif = ExifInterface(file)
+
+            exif.setAttribute(ExifInterface.TAG_DATETIME, "")
+            exif.setAttribute(ExifInterface.TAG_DATETIME_ORIGINAL, "")
+            exif.setAttribute(ExifInterface.TAG_DATETIME_DIGITIZED, "")
+            exif.setAttribute(ExifInterface.TAG_SUBSEC_TIME, "")
+            exif.setAttribute(ExifInterface.TAG_SUBSEC_TIME_ORIGINAL, "")
+            exif.setAttribute(ExifInterface.TAG_SUBSEC_TIME_DIGITIZED, "")
+
             exif.setAttribute(ExifInterface.TAG_MAKE, "")
             exif.setAttribute(ExifInterface.TAG_MODEL, "")
             exif.setAttribute(ExifInterface.TAG_SOFTWARE, "")
             exif.setAttribute(ExifInterface.TAG_ARTIST, "")
             exif.setAttribute(ExifInterface.TAG_COPYRIGHT, "")
-            exif.setAttribute(ExifInterface.TAG_DATETIME, "")
             exif.setAttribute(ExifInterface.TAG_USER_COMMENT, "")
             exif.setAttribute(ExifInterface.TAG_GPS_LATITUDE, null)
             exif.setAttribute(ExifInterface.TAG_GPS_LONGITUDE, null)
             exif.setAttribute(ExifInterface.TAG_GPS_LATITUDE_REF, null)
             exif.setAttribute(ExifInterface.TAG_GPS_LONGITUDE_REF, null)
+
             exif.saveAttributes()
-            true
-        } catch (e: IOException) {
+
+            // --- STEP 2 ---
+            // For absolute privacy, re-encode the bitmap to strip all EXIF blocks completely
+            val success = fullyStripImageMetadata(file)
+            success
+        } catch (e: Exception) {
             e.printStackTrace()
             false
         }
