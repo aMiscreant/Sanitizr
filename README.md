@@ -114,8 +114,8 @@ MIT License — use, modify, and improve freely.
 
 ## ✨ Screenshots (Add Later)
 
-> Want help creating a badge-style preview or UI mockup? Just ask.
-
 ---
 
 > Made with ❤️  by: aMiscreant to help people control their data.
+
+---
