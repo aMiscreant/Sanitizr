@@ -116,6 +116,8 @@ MIT License — use, modify, and improve freely.
 
 ---
 
-        > Made with ❤️  by: aMiscreant to help people control their data. >
+> Made with ❤️  by: aMiscreant to help people control their data. >
 
 ---
+
+# ~ **Still in testing all features may not work as intended** ~
