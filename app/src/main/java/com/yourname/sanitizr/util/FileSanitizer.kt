@@ -9,9 +9,6 @@ import androidx.exifinterface.media.ExifInterface
 import com.arthenica.ffmpegkit.FFmpegKit
 import com.arthenica.ffmpegkit.ReturnCode
 
-import com.lowagie.text.pdf.PdfReader
-import com.lowagie.text.pdf.PdfStamper
-
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
 import org.apache.commons.compress.archivers.tar.TarArchiveOutputStream
@@ -25,10 +22,12 @@ import org.tukaani.xz.LZMA2Options
 import org.tukaani.xz.XZInputStream
 import org.tukaani.xz.XZOutputStream
 
-import java.io.ByteArrayOutputStream
+import com.lowagie.text.pdf.PdfReader
+import com.lowagie.text.pdf.PdfStamper
 import java.io.File
-import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.io.ByteArrayOutputStream
+import java.io.FileInputStream
 
 import java.util.*
 import java.util.zip.*
@@ -50,7 +49,7 @@ object FileSanitizer {
             "mp4", "mov", "avi", "mkv", "webm", "3gp", "flv", "mpeg"
         ),
         "audio" to listOf(
-            "mp3", "wav", "flac", "aac", "ogg", "m4a", "wma", "alac"
+            "mp3", "wav", "flac", "aac", "ogg", "m4a", "wma", "alac", "opus"
         ),
         "pdf" to listOf(
             "pdf"
@@ -222,29 +221,25 @@ object FileSanitizer {
         }
     }
 
-    private fun sanitizePdf(file: File): Boolean {
+    fun sanitizePdf(file: File): Boolean {
         return try {
             val reader = PdfReader(file.absolutePath)
-            val sanitizedPath = """${file.parent}/sanitized_${file.name}"""
-            val stamper = PdfStamper(reader, FileOutputStream(sanitizedPath))
+            val sanitizedFile = File(file.parent, "sanitized_${file.name}")
+            val stamper = PdfStamper(reader, FileOutputStream(sanitizedFile))
 
-            // Clear all metadata
-            val emptyInfo = HashMap<Any, Any>()
-            stamper.moreInfo = emptyInfo
+            // Clear metadata
+            stamper.moreInfo = HashMap<Any, Any>()
 
             stamper.close()
             reader.close()
 
-            // Replace original file
-            val originalDeleted = file.delete()
-            val renamed = File(sanitizedPath).renameTo(file)
-            originalDeleted && renamed
+            file.delete()
+            sanitizedFile.renameTo(file)
         } catch (e: Exception) {
             e.printStackTrace()
             false
         }
     }
-    
 
     private fun sanitizeDocument(file: File): Boolean {
         return try {
@@ -556,5 +551,4 @@ object FileSanitizer {
     }
 
 }
-
 
