@@ -22,8 +22,8 @@ import org.tukaani.xz.LZMA2Options
 import org.tukaani.xz.XZInputStream
 import org.tukaani.xz.XZOutputStream
 
-import com.lowagie.text.pdf.PdfReader
-import com.lowagie.text.pdf.PdfStamper
+import com.tom_roush.pdfbox.pdmodel.PDDocument
+import com.tom_roush.pdfbox.pdmodel.PDDocumentInformation
 import java.io.File
 import java.io.FileOutputStream
 import java.io.ByteArrayOutputStream
@@ -223,15 +223,13 @@ object FileSanitizer {
 
     fun sanitizePdf(file: File): Boolean {
         return try {
-            val reader = PdfReader(file.absolutePath)
+            val document = PDDocument.load(file)
+            val info = PDDocumentInformation()
+            document.documentInformation = info // clears metadata
+
             val sanitizedFile = File(file.parent, "sanitized_${file.name}")
-            val stamper = PdfStamper(reader, FileOutputStream(sanitizedFile))
-
-            // Clear metadata
-            stamper.moreInfo = HashMap<Any, Any>()
-
-            stamper.close()
-            reader.close()
+            document.save(sanitizedFile)
+            document.close()
 
             file.delete()
             sanitizedFile.renameTo(file)
