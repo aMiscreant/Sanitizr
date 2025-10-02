@@ -1,6 +1,7 @@
 package com.yourname.sanitizr
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.app.AlertDialog
 import android.content.Intent
 import android.net.Uri
@@ -10,17 +11,14 @@ import android.os.Environment
 import android.provider.Settings
 import android.util.Log
 
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import android.view.View
 import android.widget.Button
 import android.widget.ProgressBar
 import android.widget.Toast
+import androidx.annotation.RequiresApi
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-
-import com.arthenica.ffmpegkit.FFmpegKit
-import com.arthenica.ffmpegkit.ReturnCode
 
 import com.yourname.sanitizr.model.FileItem
 import com.yourname.sanitizr.ui.FileListAdapter
@@ -87,7 +85,8 @@ class MainActivity : AppCompatActivity() {
             )
         }
     }
-
+    @RequiresApi(Build.VERSION_CODES.R)
+    @SuppressLint("UseKtx")
     private fun showPermissionDialog() {
         AlertDialog.Builder(this)
             .setTitle("Storage Permission Needed")
@@ -95,12 +94,29 @@ class MainActivity : AppCompatActivity() {
                 "Sanitizr requires permission to access files to scan and sanitize them. " +
                         "Please allow access to all files."
             )
+            .setCancelable(false)
             .setPositiveButton("Grant") { _, _ ->
-                val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
-                intent.data = Uri.parse("package:$packageName")
-                startActivity(intent)
+                try {
+                    // Open the Manage All Files Access permission page for this app
+                    val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
+                        data = Uri.parse("package:$packageName")
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    startActivity(intent)
+                } catch (_: Exception) {
+                    // Fallback: open general settings
+                    val fallbackIntent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
+                    startActivity(fallbackIntent)
+                }
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton("Cancel") { dialog, _ ->
+                dialog.dismiss()
+                Toast.makeText(
+                    this,
+                    "Cannot scan files without permission.",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
             .show()
     }
 
@@ -111,39 +127,19 @@ class MainActivity : AppCompatActivity() {
 
         Thread {
             val scannedFiles = mutableListOf<FileItem>()
-            
+
+            // Standard Android folders to scan
             val foldersToScan = listOf(
-                File("/storage/emulated/0/Download"),
-                File("/storage/emulated/0/Documents"),
-                File("/storage/emulated/0/Pictures")
+                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS),
+                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES),
+                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM),
+                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES),
+                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC)
             )
 
             for (dir in foldersToScan) {
-                Log.d("Sanitizr", "Checking dir: ${dir.absolutePath}")
-                if (dir.exists() && dir.isDirectory) {
-                    Log.d("Sanitizr", "Exists and is directory: ${dir.absolutePath}")
-                    val files = dir.listFiles()
-                    if (files != null) {
-                        Log.d("Sanitizr", "Found ${files.size} files in ${dir.absolutePath}")
-                        for (file in files) {
-                            if (file.isFile) {
-                                Log.d("Sanitizr", "File found: ${file.absolutePath}")
-                                val fileType = determineFileType(file)
-                                scannedFiles.add(
-                                    FileItem(
-                                        file = file,
-                                        fileType = fileType,
-                                        isSanitized = false
-                                    )
-                                )
-                            }
-                        }
-                    } else {
-                        Log.e("Sanitizr", "Could not list files in ${dir.absolutePath}")
-                    }
-                } else {
-                    Log.e("Sanitizr", "Directory does not exist or is not a directory: ${dir.absolutePath}")
-                }
+                scanDirectoryRecursively(dir, scannedFiles)
             }
 
             runOnUiThread {
@@ -162,6 +158,34 @@ class MainActivity : AppCompatActivity() {
         }.start()
     }
 
+    /**
+     * Recursively scans a directory and adds files to scannedFiles list
+     */
+    private fun scanDirectoryRecursively(dir: File, scannedFiles: MutableList<FileItem>) {
+        if (!dir.exists() || !dir.isDirectory) {
+            Log.e("Sanitizr", "Directory does not exist or is not a directory: ${dir.absolutePath}")
+            return
+        }
+
+        val files = dir.listFiles()
+        if (files == null) {
+            Log.e("Sanitizr", "Could not list files in ${dir.absolutePath}")
+            return
+        }
+
+        Log.d("Sanitizr", "Scanning directory: ${dir.absolutePath} (${files.size} items)")
+        for (file in files) {
+            if (file.isFile) {
+                Log.d("Sanitizr", "File found: ${file.absolutePath}")
+                val fileType = determineFileType(file)
+                scannedFiles.add(FileItem(file, fileType, isSanitized = false))
+            } else if (file.isDirectory) {
+                // Recursively scan subdirectory
+                scanDirectoryRecursively(file, scannedFiles)
+            }
+        }
+    }
+
     private fun sanitizeSelectedFiles() {
         val selectedFiles = adapter.getSelectedFiles()
         if (selectedFiles.isEmpty()) {
@@ -169,20 +193,43 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
+        progressBar.visibility = View.VISIBLE
+        btnScan.isEnabled = false
+        btnSanitize.isEnabled = false
+
         Thread {
             var successCount = 0
+            val failedFiles = mutableListOf<File>()
 
             for (fileItem in selectedFiles) {
-                val result = FileSanitizer.sanitizeFile(fileItem.file, fileItem.fileType)
-                if (result) successCount++
+                try {
+                    val result = FileSanitizer.sanitizeFile(fileItem.file, fileItem.fileType)
+                    if (result) {
+                        successCount++
+                    } else {
+                        failedFiles.add(fileItem.file)
+                    }
+                } catch (e: Exception) {
+                    Log.e("Sanitizr", "Failed to sanitize ${fileItem.file.absolutePath}", e)
+                    failedFiles.add(fileItem.file)
+                }
             }
 
             runOnUiThread {
-                Toast.makeText(this, "Sanitized $successCount files.", Toast.LENGTH_SHORT).show()
-            
-                // Optionally refresh list and mark sanitized files
+                progressBar.visibility = View.GONE
+                btnScan.isEnabled = true
+                btnSanitize.isEnabled = false
+
+                Toast.makeText(
+                    this,
+                    "Sanitized $successCount files." +
+                            if (failedFiles.isNotEmpty()) "\nFailed: ${failedFiles.size}" else "",
+                    Toast.LENGTH_LONG
+                ).show()
+
+                // Refresh list and mark sanitized files
                 val updatedList = adapter.getAllFiles().map { file ->
-                    if (selectedFiles.contains(file)) {
+                    if (selectedFiles.any { it.file.absolutePath == file.file.absolutePath }) {
                         file.copy(isSanitized = true)
                     } else {
                         file
@@ -192,7 +239,7 @@ class MainActivity : AppCompatActivity() {
             }
         }.start()
     }
-    
+
     private fun determineFileType(file: File): String {
         val name = file.name.lowercase()
 
@@ -260,4 +307,3 @@ class MainActivity : AppCompatActivity() {
     }
 
 }
-
