@@ -15,6 +15,11 @@ android {
         targetSdk = 34
         versionCode = 1
         versionName = "1.0"
+
+        ndk {
+            abiFilters.addAll(listOf("armeabi-v7a", "arm64-v8a"))
+        }
+
     }
 
     compileOptions {
@@ -44,10 +49,9 @@ dependencies {
     //noinspection GradleDependency
     implementation("androidx.recyclerview:recyclerview:1.3.2")
     implementation("androidx.exifinterface:exifinterface:1.4.1")
-    //noinspection Aligned16KB
-    implementation("com.mrljdx:ffmpeg-kit-full:6.1.4")
+    implementation("com.moizhassan.ffmpeg:ffmpeg-kit-16kb:6.0.0")
     implementation("com.google.android.material:material:1.13.0")
-    implementation("com.github.librepdf:openpdf:1.3.30")
+    implementation("com.tom-roush:pdfbox-android:2.0.27.0")
     implementation("org.apache.poi:poi-ooxml:5.4.1")
     implementation("org.apache.commons:commons-compress:1.28.0")
     implementation("org.tukaani:xz:1.10")
