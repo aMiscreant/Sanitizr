@@ -2,29 +2,29 @@
 
 **Sanitizr** is a powerful Android utility app for cleaning metadata and timestamps from various file types including images, videos, documents, PDFs, archives, and ebooks.
 
-> ✅ Your files, your privacy. Sanitizr helps you remove hidden data from files before sharing them.
+> Your files, your privacy. Sanitizr helps you remove hidden data from files before sharing them.
 
 ---
 
-## 📦 Features
+## Features
 
-- 🔍 **Scan folders** like Downloads, Pictures, and Documents
-- 🖼️ **Image metadata** removal (EXIF: GPS, camera info, etc.)
-- 📹 **Video/audio stream sanitization** via FFmpeg (removes tags)
-- 📄 **PDF metadata** stripping
-- 🧾 **Document metadata** cleanup (Word, Excel, PowerPoint)
-- 📚 **Ebook sanitization** (EPUB .opf metadata)
-- 🗜️ **Archive support**  
+- **Scan folders** like Downloads, Pictures, and Documents
+- **Image metadata** removal (EXIF: GPS, camera info, etc.)
+- **Video/audio stream sanitization** via FFmpeg (removes tags)
+- **PDF metadata** stripping
+- **Document metadata** cleanup (Word, Excel, PowerPoint)
+- **Ebook sanitization** (EPUB .opf metadata)
+- **Archive support**  
   - ZIP (.zip)  
   - TAR (.tar)  
   - GZ (.gz)  
   - BZ2 (.bz2)  
   - XZ (.xz)  
-- ⚙️ Simple UI for selecting and sanitizing files in bulk
+- Simple UI for selecting and sanitizing files in bulk
 
 ---
 
-## 🛠️ How It Works
+## How It Works
 
 Sanitizr parses file types using known extensions and applies file-type-specific cleaning:
 
@@ -37,7 +37,7 @@ Sanitizr parses file types using known extensions and applies file-type-specific
 
 ---
 
-## 📁 Supported File Types
+## Supported File Types
 
 | Type       | Extensions                                      |
 |------------|--------------------------------------------------|
@@ -51,7 +51,7 @@ Sanitizr parses file types using known extensions and applies file-type-specific
 
 ---
 
-## 🧱 Built With
+## Built With
 
 - [AndroidX](https://developer.android.com/jetpack/androidx)
 - [FFmpegKit](https://github.com/arthenica/ffmpeg-kit)
@@ -62,7 +62,7 @@ Sanitizr parses file types using known extensions and applies file-type-specific
 
 ---
 
-## 🧪 Dev Features
+## Dev Features
 
 - Modular sanitization functions (`sanitizeImage()`, `sanitizePdf()`, etc.)
 - Archive-safe operations with temp files
@@ -71,15 +71,15 @@ Sanitizr parses file types using known extensions and applies file-type-specific
 
 ---
 
-## 📷 UI Preview
+## UI Preview
 
-> 🟧 **Modern clean UI**  
-> 🟢 File list, selection controls, and progress bar  
-> 🔧 Easy to customize layout with ConstraintLayout
+> **Modern clean UI**  
+> File list, selection controls, and progress bar  
+> Easy to customize layout with ConstraintLayout
 
 ---
 
-## 🔒 Privacy First
+## Privacy First
 
 Sanitizr works **offline**, never uploads files, and does **not** retain data after processing.
 
@@ -89,7 +89,7 @@ Sanitizr works **offline**, never uploads files, and does **not** retain data af
 
 ---
 
-## 🚀 Getting Started (Dev)
+## Getting Started (Dev)
 
 1. Clone repo  
 2. Open in Android Studio  
@@ -97,22 +97,18 @@ Sanitizr works **offline**, never uploads files, and does **not** retain data af
 
 ---
 
-## 📌 License
+## License
 
-MIT License — use, modify, and improve freely.
-
----
-
-## 💡 Ideas for Next Version
-
-- 📱 Share sanitized files directly
-- ☁️ Add support for cloud files (MEGA)
-- 🔍 Deep scan for nested archives or attachments
-- 👁️ Preview metadata before and after
+MIT License.
 
 ---
 
-## ✨ Screenshots (Add Later)
+## Ideas for Next Version
+
+- Share sanitized files directly
+- Add support for cloud files (MEGA)
+- Deep scan for nested archives or attachments
+- 👁Preview metadata before and after
 
 ---
 
