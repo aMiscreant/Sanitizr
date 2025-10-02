@@ -1,5 +1,11 @@
 # 🧼 Sanitizr
 
+---
+
+![Sanitizr](https://image2url.com/images/1758934406078-4dfa0bf7-36eb-45c5-8f17-d7459b787055.jpeg)
+
+---
+
 **Sanitizr** is a powerful Android utility app for cleaning metadata and timestamps from various file types including images, videos, documents, PDFs, archives, and ebooks.
 
 > Your files, your privacy. Sanitizr helps you remove hidden data from files before sharing them.
