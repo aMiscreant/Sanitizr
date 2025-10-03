@@ -5,33 +5,26 @@ package com.yourname.sanitizr.util
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import androidx.exifinterface.media.ExifInterface
-
 import com.arthenica.ffmpegkit.FFmpegKit
 import com.arthenica.ffmpegkit.ReturnCode
-
+import com.tom_roush.pdfbox.pdmodel.PDDocument
+import com.tom_roush.pdfbox.pdmodel.PDDocumentInformation
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
 import org.apache.commons.compress.archivers.tar.TarArchiveOutputStream
 import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream
 import org.apache.commons.compress.compressors.bzip2.BZip2CompressorOutputStream
-
 import org.apache.poi.openxml4j.opc.OPCPackage
 import org.apache.poi.xwpf.usermodel.XWPFDocument
-
 import org.tukaani.xz.LZMA2Options
 import org.tukaani.xz.XZInputStream
 import org.tukaani.xz.XZOutputStream
-
-import com.tom_roush.pdfbox.pdmodel.PDDocument
-import com.tom_roush.pdfbox.pdmodel.PDDocumentInformation
-import java.io.File
-import java.io.FileOutputStream
 import java.io.ByteArrayOutputStream
+import java.io.File
 import java.io.FileInputStream
-
+import java.io.FileOutputStream
 import java.util.*
 import java.util.zip.*
-
 import javax.xml.parsers.DocumentBuilderFactory
 import javax.xml.transform.OutputKeys
 import javax.xml.transform.TransformerFactory
@@ -49,7 +42,7 @@ object FileSanitizer {
             "mp4", "mov", "avi", "mkv", "webm", "3gp", "flv", "mpeg"
         ),
         "audio" to listOf(
-            "mp3", "wav", "flac", "aac", "ogg", "m4a", "wma", "alac", "opus"
+            "mp3", "wav", "flac", "aac", "ogg", "m4a", "wma", "alac", "oga", "webp"
         ),
         "pdf" to listOf(
             "pdf"
@@ -69,29 +62,30 @@ object FileSanitizer {
     fun sanitizeFile(file: File, fileType: String = "auto"): Boolean {
         val type = if (fileType == "auto") {
             detectFileType(file) ?: return false.also {
-                println("Could not detect file type for: ${file.name}")
+                println("[SANITIZR] Could not detect file type for: ${file.name}")
             }
         } else {
             fileType.lowercase(Locale.ROOT)
         }
 
         return when (type) {
-            "image"     -> sanitizeImage(file)
-            "video"     -> sanitizeVideo(file)
-            "audio"     -> sanitizeAudio(file)
-            "pdf"       -> sanitizePdf(file)
-            "document"  -> sanitizeDocument(file)
-            "ebook"     -> sanitizeEbook(file)
-            "archive"   -> when (file.extension.lowercase(Locale.ROOT)) {
+            "image" -> sanitizeImage(file)
+            "video" -> sanitizeVideo(file)
+            "audio" -> sanitizeAudio(file)
+            "pdf" -> sanitizePdf(file)
+            "document" -> sanitizeDocument(file)
+            "ebook" -> sanitizeEbook(file)
+            "archive" -> when (file.extension.lowercase(Locale.ROOT)) {
                 "zip" -> sanitizeZip(file)
                 "tar" -> sanitizeTar(file)
-                "gz"  -> sanitizeGz(file)
+                "gz" -> sanitizeGz(file)
                 "bz2" -> sanitizeBz2(file)
-                "xz"  -> sanitizeXz(file)
+                "xz" -> sanitizeXz(file)
                 else -> sanitizeArchive(file) // <-- fallback stub
             }
+
             else -> {
-                println("Unsupported file type: $type")
+                println("[SANITIZR] Unsupported file type: $type")
                 false
             }
         }
@@ -106,7 +100,7 @@ object FileSanitizer {
         return try {
             val bitmap = BitmapFactory.decodeFile(file.absolutePath)
             if (bitmap == null) {
-                println("Failed to decode image: ${file.absolutePath}")
+                println("[SANITIZR] Failed to decode image: ${file.absolutePath}")
                 return false
             }
 
@@ -169,52 +163,67 @@ object FileSanitizer {
         }
     }
 
-    private fun sanitizeVideo(file: File): Boolean {
-        try {
-            val sanitizedPath = """${file.parent}/sanitized_${file.name}"""
-            val cmd = arrayOf(
-                "-i", file.absolutePath,
-                "-map", "0",       // copy all streams
-                "-map_metadata", "-1", // remove all metadata
-                "-c", "copy",      // copy codec, no re-encode
-                sanitizedPath
-            )
+    private fun sanitizeAudio(file: File): Boolean {
+        return try {
+            val tempFile = File(file.parentFile, "temp_${file.name}")
 
-            val session = FFmpegKit.execute(cmd.joinToString(" "))
+            // Quote paths with spaces
+            val cmd = listOf(
+                "-y",
+                "-i", "\"${file.absolutePath}\"",
+                "-map_metadata", "-1",
+                "-c", "copy",
+                "\"${tempFile.absolutePath}\""
+            ).joinToString(" ")
+
+            val session = FFmpegKit.execute(cmd)
+            println("[SANITIZR] FFmpeg logs:\n${session.allLogsAsString}")
+
             if (ReturnCode.isSuccess(session.returnCode)) {
-                // Replace original file with sanitized
-                val originalDeleted = file.delete()
-                val renamed = File(sanitizedPath).renameTo(file)
-                return originalDeleted && renamed
+                if (file.delete()) {
+                    tempFile.renameTo(file)
+                } else {
+                    tempFile.delete()
+                    false
+                }
             } else {
-                println("FFmpeg failed: ${session.returnCode} ${session.failStackTrace}")
+                println("[SANITIZR] FFmpeg failed: ${session.returnCode}")
+                false
             }
         } catch (e: Exception) {
             e.printStackTrace()
+            false
         }
-        return false
     }
 
-    private fun sanitizeAudio(file: File): Boolean {
-        return try {
-            val sanitizedPath = """${file.parent}/sanitized_${file.name}"""
-            val cmd = arrayOf(
-                "-i", file.absolutePath,
-                "-map_metadata", "-1", // remove all metadata
-                "-c", "copy",          // copy audio, no re-encode
-                sanitizedPath
-            )
 
-            val session = FFmpegKit.execute(cmd.joinToString(" "))
+    private fun sanitizeVideo(file: File): Boolean {
+        return try {
+            val tempFile = File(file.parentFile, "temp_${file.name}")
+
+            // Quote paths with spaces
+            val cmd = listOf(
+                "-y",
+                "-i", "\"${file.absolutePath}\"",
+                "-map_metadata", "-1",
+                "-c", "copy",
+                "\"${tempFile.absolutePath}\""
+            ).joinToString(" ")
+
+            val session = FFmpegKit.execute(cmd)
+            println("[SANITIZR] FFmpeg logs:\n${session.allLogsAsString}")
+
             if (ReturnCode.isSuccess(session.returnCode)) {
-                // Replace original file with sanitized
-                val originalDeleted = file.delete()
-                val renamed = File(sanitizedPath).renameTo(file)
-                return originalDeleted && renamed
+                if (file.delete()) {
+                    tempFile.renameTo(file)
+                } else {
+                    tempFile.delete()
+                    false
+                }
             } else {
-                println("FFmpeg failed: ${session.returnCode} ${session.failStackTrace}")
+                println("[SANITIZR] FFmpeg failed: ${session.returnCode}")
+                false
             }
-            false
         } catch (e: Exception) {
             e.printStackTrace()
             false
@@ -222,55 +231,105 @@ object FileSanitizer {
     }
 
     fun sanitizePdf(file: File): Boolean {
+        val tempFile = File(file.parentFile, "temp_${file.name}")
+        println("[SANITIZR] Starting PDF sanitization for: ${file.absolutePath}")
+
         return try {
             val document = PDDocument.load(file)
+            println("[SANITIZR] PDF loaded successfully")
+
+            // Clear metadata
             val info = PDDocumentInformation()
-            document.documentInformation = info // clears metadata
+            document.documentInformation = info
+            println("[SANITIZR] Metadata cleared")
 
-            val sanitizedFile = File(file.parent, "sanitized_${file.name}")
-            document.save(sanitizedFile)
+            // Save to temp file
+            document.save(tempFile)
             document.close()
+            println("[SANITIZR] Saved sanitized PDF to temp file: ${tempFile.absolutePath}")
 
-            file.delete()
-            sanitizedFile.renameTo(file)
+            // Replace original safely
+            if (file.delete()) {
+                if (tempFile.renameTo(file)) {
+                    println("[SANITIZR] PDF replaced original successfully")
+                    true
+                } else {
+                    println("[SANITIZR] Failed to rename temp file to original")
+                    tempFile.delete()
+                    false
+                }
+            } else {
+                println("[SANITIZR] Failed to delete original PDF")
+                tempFile.delete()
+                false
+            }
         } catch (e: Exception) {
+            println("[SANITIZR] Exception during PDF sanitization: ${e.message}")
             e.printStackTrace()
+            tempFile.delete()
             false
         }
     }
 
     private fun sanitizeDocument(file: File): Boolean {
+        println("[SANITIZR] Starting Word document sanitization for: ${file.absolutePath}")
+
+        val tempFile = File(file.parentFile, "temp_${file.name}")
+
         return try {
-            val opc = OPCPackage.open(file)
-            val doc = XWPFDocument(opc)
+            // Open the Word file (.docx) as an OPCPackage
+            OPCPackage.open(file).use { opc ->
+                val doc = XWPFDocument(opc)
+                println("[SANITIZR] Document loaded successfully")
 
-            val props = doc.properties.coreProperties
-            props.title = ""
-            props.creator = ""
-            props.description = ""
-            props.setSubjectProperty("")
-            props.keywords = ""
+                // Strip core properties metadata
+                val props = doc.properties.coreProperties
+                props.title = ""
+                props.creator = ""
+                props.description = ""
+                props.setSubjectProperty("")
+                props.keywords = ""
+                println("[SANITIZR] Core metadata cleared")
 
-            val sanitizedPath = """${file.parent}/sanitized_${file.name}"""
-            FileOutputStream(sanitizedPath).use { out ->
-                doc.write(out)
+                // Write to temporary file first
+                FileOutputStream(tempFile, false).use { out ->
+                    doc.write(out)
+                }
+                doc.close()
+                println("[SANITIZR] Document saved successfully to temp file: ${tempFile.absolutePath}")
             }
-            doc.close()
 
-            val originalDeleted = file.delete()
-            val renamed = File(sanitizedPath).renameTo(file)
-            originalDeleted && renamed
+            // Replace original file with temp file
+            if (file.delete()) {
+                val renamed = tempFile.renameTo(file)
+                println(
+                    if (renamed)
+                        "[SANITIZR] Temp file replaced original successfully"
+                    else
+                        "[SANITIZR] Failed to rename temp file to original"
+                )
+                renamed
+            } else {
+                println("[SANITIZR] Failed to delete original file")
+                tempFile.delete() // cleanup
+                false
+            }
         } catch (e: Exception) {
+            println("[SANITIZR] Exception during document sanitization: ${e.message}")
             e.printStackTrace()
+            tempFile.delete() // cleanup
             false
         }
     }
 
     private fun sanitizeEbook(file: File): Boolean {
+        println("[SANITIZR] Starting ebook sanitization for: ${file.absolutePath}")
+
         return try {
-            // Only implement real scrubbing for EPUB for now
             if (file.extension.lowercase() == "epub") {
-                val tempFile = File(file.parent, "temp_${file.name}")
+                val tempFile = File(file.parentFile, "temp_${file.name}")
+                println("[SANITIZR] Temp file will be: ${tempFile.absolutePath}")
+
                 ZipFile(file).use { zip ->
                     ZipOutputStream(tempFile.outputStream()).use { zos ->
                         val entries = zip.entries()
@@ -279,6 +338,7 @@ object FileSanitizer {
                             val entryData = zip.getInputStream(entry).readBytes()
 
                             if (entry.name.endsWith(".opf")) {
+                                println("[SANITIZR] Sanitizing metadata in ${entry.name}")
                                 val sanitizedXml = sanitizeEpubMetadata(entryData)
                                 zos.putNextEntry(ZipEntry(entry.name))
                                 zos.write(sanitizedXml)
@@ -292,126 +352,154 @@ object FileSanitizer {
                     }
                 }
 
+                // Replace original only if temp file was successfully created
                 if (file.delete()) {
-                    tempFile.renameTo(file)
+                    val renamed = tempFile.renameTo(file)
+                    println(
+                        if (renamed)
+                            "[SANITIZR] Temp file replaced original successfully"
+                        else {
+                            tempFile.delete()
+                            "[SANITIZR] Failed to rename temp file to original"
+                        }
+                    )
+                    renamed
                 } else {
+                    println("[SANITIZR] Failed to delete original ebook")
                     tempFile.delete()
                     false
                 }
             } else {
-                // fallback stub for MOBI, AZW3, FB2
-                println("Stub sanitizer: Ebook (${file.name}) not yet implemented")
+                println("[SANITIZR] Stub sanitizer: Ebook (${file.name}) not yet implemented")
                 copyAsSanitized(file)
             }
         } catch (e: Exception) {
+            println("[SANITIZR] Exception during ebook sanitization for ${file.name}: ${e.message}")
             e.printStackTrace()
-            println("Ebook sanitization failed for ${file.name}, using stub")
             copyAsSanitized(file)
         }
     }
 
     private fun sanitizeArchive(file: File): Boolean {
-        println("Stub sanitizer: Generic archive (${file.name}) not yet implemented")
+        println("[SANITIZR] Stub sanitizer: Generic archive (${file.name}) not yet implemented")
         return copyAsSanitized(file)
     }
 
     private fun sanitizeEpubMetadata(xmlData: ByteArray): ByteArray {
-        val dbFactory = DocumentBuilderFactory.newInstance()
-        val dBuilder = dbFactory.newDocumentBuilder()
-        val doc = dBuilder.parse(xmlData.inputStream())
-        doc.documentElement.normalize()
+        return try {
+            val dbFactory = DocumentBuilderFactory.newInstance()
+            val dBuilder = dbFactory.newDocumentBuilder()
+            val doc = dBuilder.parse(xmlData.inputStream())
+            doc.documentElement.normalize()
 
-        val metadataNodes = doc.getElementsByTagName("metadata")
-        if (metadataNodes.length > 0) {
-            val metadata = metadataNodes.item(0)
-
-            // Remove all child nodes (clears metadata)
-            while (metadata.hasChildNodes()) {
-                metadata.removeChild(metadata.firstChild)
+            val metadataNodes = doc.getElementsByTagName("metadata")
+            if (metadataNodes.length > 0) {
+                val metadata = metadataNodes.item(0)
+                println("[SANITIZR] Found <metadata> element, removing child nodes")
+                while (metadata.hasChildNodes()) {
+                    metadata.removeChild(metadata.firstChild)
+                }
+            } else {
+                println("[SANITIZR] No <metadata> element found in EPUB OPF")
             }
+
+            val transformer = TransformerFactory.newInstance().newTransformer()
+            transformer.setOutputProperty(OutputKeys.INDENT, "yes")
+            val outputStream = ByteArrayOutputStream()
+            transformer.transform(DOMSource(doc), StreamResult(outputStream))
+            outputStream.toByteArray()
+        } catch (e: Exception) {
+            println("[SANITIZR] Exception while sanitizing EPUB metadata: ${e.message}")
+            e.printStackTrace()
+            xmlData // fallback: return original data if something fails
+        }
+    }
+
+    private fun sanitizeZip(file: File): Boolean {
+        if (!file.exists()) {
+            println("[SANITIZR] File does not exist: ${file.absolutePath}")
+            return false
         }
 
-        val transformer = TransformerFactory.newInstance().newTransformer()
-        transformer.setOutputProperty(OutputKeys.INDENT, "yes")
-        val outputStream = ByteArrayOutputStream()
-        transformer.transform(DOMSource(doc), StreamResult(outputStream))
-        return outputStream.toByteArray()
-    }
-    
-    private fun sanitizeZip(file: File): Boolean {
-        if (!file.exists()) return false
         val tempFile = File(file.parentFile, "temp_sanitized.zip")
+        println("[SANITIZR] Starting ZIP sanitization: ${file.absolutePath}")
 
-        try {
+        return try {
             ZipFile(file).use { zip ->
                 ZipOutputStream(FileOutputStream(tempFile)).use { zos ->
                     val entries = zip.entries()
                     while (entries.hasMoreElements()) {
                         val entry = entries.nextElement()
 
-                        if (entry.isDirectory) {
-                            val dirEntry = ZipEntry(entry.name)
-                            dirEntry.time = 0
-                            zos.putNextEntry(dirEntry)
-                            zos.closeEntry()
-                        } else {
-                            val newEntry = ZipEntry(entry.name)
-                            newEntry.time = 0
-                            zos.putNextEntry(newEntry)
+                        val newEntry = ZipEntry(entry.name)
+                        newEntry.time = 0 // reset timestamp
+                        zos.putNextEntry(newEntry)
+
+                        if (!entry.isDirectory) {
                             zip.getInputStream(entry).use { input ->
                                 input.copyTo(zos)
                             }
-                            zos.closeEntry()
                         }
+
+                        zos.closeEntry()
+                        println("[SANITIZR] Added entry: ${entry.name}")
                     }
                 }
             }
+
             if (file.delete()) {
                 tempFile.renameTo(file)
+                println("[SANITIZR] ZIP sanitization successful: ${file.absolutePath}")
+                true
             } else {
+                println("[SANITIZR] Failed to delete original ZIP: ${file.absolutePath}")
                 tempFile.delete()
-                return false
+                false
             }
-            return true
         } catch (e: Exception) {
+            println("[SANITIZR] Exception during ZIP sanitization: ${e.message}")
             e.printStackTrace()
             tempFile.delete()
-            return false
+            false
         }
     }
-    
+
     private fun sanitizeTar(file: File): Boolean {
-        println("Sanitizing TAR archive: ${file.name}")
+        println("[SANITIZR] Starting TAR sanitization: ${file.absolutePath}")
 
         val tempFile = File(file.parentFile, "temp_sanitized.tar")
 
-        try {
+        return try {
             TarArchiveInputStream(file.inputStream()).use { tis ->
                 TarArchiveOutputStream(tempFile.outputStream()).use { tos ->
                     var entry: TarArchiveEntry? = tis.nextTarEntry
 
                     while (entry != null) {
-                        if (!entry.isDirectory) {
-                            val sanitizedEntry = TarArchiveEntry(entry.name)
+                        val currentEntry = entry // non-nullable copy
 
-                            sanitizedEntry.size = entry.size
-                            sanitizedEntry.modTime = Date(0L) // clear modification time
-                            sanitizedEntry.userName = ""
-                            sanitizedEntry.groupName = ""
-                            sanitizedEntry.mode = 0b110100100 // rw-r--r--
-
-                            tos.putArchiveEntry(sanitizedEntry)
-                            tis.copyTo(tos)
-                            tos.closeArchiveEntry()
+                        val sanitizedEntry = if (!currentEntry.isDirectory) {
+                            TarArchiveEntry(currentEntry.name).apply {
+                                size = currentEntry.size
+                                modTime = Date(0L)
+                                userName = ""
+                                groupName = ""
+                                mode = 0b110100100 // rw-r--r--
+                            }
                         } else {
-                            // Add directory as empty entry
-                            val dirEntry = TarArchiveEntry(entry.name)
-                            dirEntry.modTime = Date(0L)
-                            dirEntry.userName = ""
-                            dirEntry.groupName = ""
-                            tos.putArchiveEntry(dirEntry)
-                            tos.closeArchiveEntry()
+                            TarArchiveEntry(currentEntry.name).apply {
+                                modTime = Date(0L)
+                                userName = ""
+                                groupName = ""
+                            }
                         }
+
+                        tos.putArchiveEntry(sanitizedEntry)
+                        if (!currentEntry.isDirectory) {
+                            tis.copyTo(tos)
+                        }
+                        tos.closeArchiveEntry()
+
+                        println("[SANITIZR] Added TAR entry: ${currentEntry.name}")
 
                         entry = tis.nextTarEntry
                     }
@@ -422,27 +510,28 @@ object FileSanitizer {
 
             if (file.delete()) {
                 tempFile.renameTo(file)
+                println("[SANITIZR] TAR sanitization successful: ${file.absolutePath}")
+                true
             } else {
+                println("[SANITIZR] Failed to delete original TAR: ${file.absolutePath}")
                 tempFile.delete()
-                return false
+                false
             }
 
-            println("TAR archive sanitized successfully: ${file.name}")
-            return true
-
         } catch (e: Exception) {
+            println("[SANITIZR] Exception during TAR sanitization: ${e.message}")
             e.printStackTrace()
             tempFile.delete()
-            return false
+            false
         }
     }
 
     private fun sanitizeGz(file: File): Boolean {
-        println("Sanitizing GZ archive: ${file.name}")
+        println("[SANITIZR] Starting GZ sanitization: ${file.absolutePath}")
 
         val tempFile = File(file.parentFile, "temp_sanitized.gz")
 
-        try {
+        return try {
             FileInputStream(file).use { fis ->
                 GZIPInputStream(fis).use { gis ->
                     FileOutputStream(tempFile).use { fos ->
@@ -455,27 +544,28 @@ object FileSanitizer {
 
             if (file.delete()) {
                 tempFile.renameTo(file)
+                println("[SANITIZR] GZ sanitization successful: ${file.absolutePath}")
+                true
             } else {
+                println("[SANITIZR] Failed to delete original GZ: ${file.absolutePath}")
                 tempFile.delete()
-                return false
+                false
             }
 
-            println("GZ archive sanitized successfully: ${file.name}")
-            return true
-
         } catch (e: Exception) {
+            println("[SANITIZR] Exception during GZ sanitization: ${e.message}")
             e.printStackTrace()
             tempFile.delete()
-            return false
+            false
         }
     }
 
     private fun sanitizeBz2(file: File): Boolean {
-        println("Sanitizing BZ2 archive: ${file.name}")
+        println("[SANITIZR] Starting BZ2 sanitization: ${file.absolutePath}")
 
         val tempFile = File(file.parentFile, "temp_sanitized.bz2")
 
-        try {
+        return try {
             FileInputStream(file).use { fis ->
                 BZip2CompressorInputStream(fis).use { bzis ->
                     FileOutputStream(tempFile).use { fos ->
@@ -488,27 +578,28 @@ object FileSanitizer {
 
             if (file.delete()) {
                 tempFile.renameTo(file)
+                println("[SANITIZR] BZ2 sanitization successful: ${file.absolutePath}")
+                true
             } else {
+                println("[SANITIZR] Failed to delete original BZ2: ${file.absolutePath}")
                 tempFile.delete()
-                return false
+                false
             }
 
-            println("BZ2 archive sanitized successfully: ${file.name}")
-            return true
-
         } catch (e: Exception) {
+            println("[SANITIZR] Exception during BZ2 sanitization: ${e.message}")
             e.printStackTrace()
             tempFile.delete()
-            return false
+            false
         }
     }
 
     private fun sanitizeXz(file: File): Boolean {
-        println("Sanitizing XZ archive: ${file.name}")
+        println("[SANITIZR] Starting XZ sanitization: ${file.absolutePath}")
 
         val tempFile = File(file.parentFile, "temp_sanitized.xz")
 
-        try {
+        return try {
             FileInputStream(file).use { fis ->
                 XZInputStream(fis).use { xzis ->
                     FileOutputStream(tempFile).use { fos ->
@@ -521,32 +612,40 @@ object FileSanitizer {
 
             if (file.delete()) {
                 tempFile.renameTo(file)
+                println("[SANITIZR] XZ sanitization successful: ${file.absolutePath}")
+                true
             } else {
+                println("[SANITIZR] Failed to delete original XZ: ${file.absolutePath}")
                 tempFile.delete()
-                return false
+                false
             }
 
-            println("XZ archive sanitized successfully: ${file.name}")
-            return true
-
         } catch (e: Exception) {
+            println("[SANITIZR] Exception during XZ sanitization: ${e.message}")
             e.printStackTrace()
             tempFile.delete()
-            return false
+            false
         }
     }
 
     private fun copyAsSanitized(file: File): Boolean {
+        val tempFile = File(file.parentFile, "temp_sanitized_${file.name}")
         return try {
-            val sanitizedFile = File(file.parent, "sanitized_${file.name}")
-            file.copyTo(sanitizedFile, overwrite = true)
-            println("Stub-sanitized (copied): ${file.name}")
-            true
+            file.copyTo(tempFile, overwrite = true)
+            if (file.delete()) {
+                tempFile.renameTo(file)
+                println("[SANITIZR] Stub-sanitized (copied): ${file.absolutePath}")
+                true
+            } else {
+                println("[SANITIZR] Failed to delete original during stub-sanitization: ${file.absolutePath}")
+                tempFile.delete()
+                false
+            }
         } catch (e: Exception) {
-            println("Failed to stub-sanitize ${file.name}: ${e.message}")
+            println("[SANITIZR] Failed to stub-sanitize ${file.absolutePath}: ${e.message}")
+            tempFile.delete()
             false
         }
     }
 
 }
-
